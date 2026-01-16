@@ -2,7 +2,7 @@
 // Supabase Database Operations
 // ============================================================================
 
-import { supabase } from './config.js';
+import { supabase } from './config.default.js';
 
 // ============================================================================
 // NAČÍTANIE KÓDOVNÍKOV
