@@ -1,13 +1,12 @@
 // ============================================================================
-// Supabase Configuration (Default/Public)
+// Supabase Configuration Template
 // ============================================================================
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-// Supabase configuration
-// NOTE: These are public credentials - safe to expose in browser
-const SUPABASE_URL = 'https://jauatpbswhmdnsxzlard.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_uwcpGOX0iJM1_UojJr3l_A_76o4xUDa';
+// These values will be replaced by GitHub Actions during deployment
+const SUPABASE_URL = 'SUPABASE_URL_PLACEHOLDER';
+const SUPABASE_ANON_KEY = 'SUPABASE_ANON_KEY_PLACEHOLDER';
 
 // Initialize Supabase client
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

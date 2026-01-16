@@ -20,6 +20,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
+      - name: Create config.js from template
+        run: |
+          cp js/config.template.js js/config.js
+          sed -i "s|SUPABASE_URL_PLACEHOLDER|${{ secrets.SUPABASE_URL }}|g" js/config.js
+          sed -i "s|SUPABASE_ANON_KEY_PLACEHOLDER|${{ secrets.SUPABASE_ANON_KEY }}|g" js/config.js
+      
       - name: Setup Pages
         uses: actions/configure-pages@v4
       
