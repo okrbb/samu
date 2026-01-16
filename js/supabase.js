@@ -317,15 +317,16 @@ export function getRiskLevel(probability) {
 
 /**
  * Vráti label pre úroveň rizika
+ * Bodka je pridaná cez CSS ::before
  */
 export function getRiskLabel(level) {
     const labels = {
-        critical: '🔴 Kritické',
-        high: '🟠 Vysoké',
-        medium: '🟡 Stredné',
-        low: '🟢 Nízke'
+        critical: 'Kritické',
+        high: 'Vysoké',
+        medium: 'Stredné',
+        low: 'Nízke'
     };
-    return labels[level] || '🟢 Nízke';
+    return labels[level] || 'Nízke';
 }
 
 // ============================================================================

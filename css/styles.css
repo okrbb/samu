@@ -1009,6 +1009,16 @@ body {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    white-space: nowrap;
+    min-width: fit-content;
+}
+
+.risk-badge::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
 .risk-badge.critical {
@@ -1017,10 +1027,18 @@ body {
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.risk-badge.critical::before {
+    background: var(--color-critical);
+}
+
 .risk-badge.high {
     background: rgba(249, 115, 22, 0.15);
     color: var(--color-high);
     border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.risk-badge.high::before {
+    background: var(--color-high);
 }
 
 .risk-badge.medium {
@@ -1029,10 +1047,18 @@ body {
     border: 1px solid rgba(234, 179, 8, 0.3);
 }
 
+.risk-badge.medium::before {
+    background: var(--color-medium);
+}
+
 .risk-badge.low {
     background: rgba(16, 185, 129, 0.15);
     color: var(--color-low);
     border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.risk-badge.low::before {
+    background: var(--color-low);
 }
 
 /* Action Buttons in Table */
