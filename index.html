@@ -781,12 +781,15 @@
                         
                         <div class="form-group">
                             <label class="form-label">Úroveň rizika</label>
-                            <select id="riskLevel" class="form-control">
+                            <select id="riskLevel" class="form-control" disabled>
                                 <option value="low">🟢 Nízke</option>
                                 <option value="medium">🟡 Stredné</option>
                                 <option value="high">🟠 Vysoké</option>
                                 <option value="critical">🔴 Kritické</option>
                             </select>
+                            <small style="color: var(--gray-500); margin-top: 0.25rem; display: block;">
+                                Úroveň rizika sa automaticky určuje na základe pravdepodobnosti výskytu
+                            </small>
                         </div>
                     </div>
                 </div>

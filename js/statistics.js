@@ -3,20 +3,17 @@
 // Štatistiky a vizualizácie pre SAMU aplikáciu
 // ============================================================================
 
-import { getRiskLabel } from './supabase.js';
+import { getRiskLabel, getRiskLevel } from './supabase.js';
 
 // ============================================================================
 // STATE MANAGEMENT
 // ============================================================================
 
 let statsState = {
-    viewType: 'region',           // 'region', 'district', 'compare'
-    selectedDistrict: null,       // Pre single district view
-    selectedDistricts: [],        // Pre comparison view
-    allDistricts: [],             // Zoznam všetkých okresov
     filteredTerritories: [],      // Filtrované územia
     statsCache: null,             // Cache pre štatistiky
-    chartsInitialized: false      // Flag či sú grafy už inicializované
+    chartsInitialized: false,     // Flag či sú grafy už inicializované
+    probabilities: []             // Kódovník pravdepodobností
 };
 
 // Debounce timer
@@ -53,8 +50,11 @@ function calculateStatistics(territories) {
     };
     
     territories.forEach(territory => {
+        // DYNAMICKÝ PREPOČET riskLevel z probability pomocou kódovníka
+        const riskLevel = getRiskLevel(territory.probability, statsState.probabilities);
+        
         // Risk levels
-        stats.riskLevels[territory.riskLevel]++;
+        stats.riskLevels[riskLevel]++;
         
         // Municipalities
         if (!stats.municipalities[territory.municipalityName]) {
@@ -80,7 +80,7 @@ function calculateStatistics(territories) {
             };
         }
         stats.districts[territory.district].total++;
-        stats.districts[territory.district][territory.riskLevel]++;
+        stats.districts[territory.district][riskLevel]++;
         stats.districts[territory.district].population += territory.endangeredPopulation || 0;
         
         // Probabilities
@@ -488,13 +488,16 @@ function createTopRisksTable(territories) {
 // HLAVNÁ FUNKCIA
 // ============================================================================
 
-function initializeStatistics(territories, municipalities, events) {
+function initializeStatistics(territories, municipalities, events, probabilities = []) {
     console.log('📊 Inicializujem štatistiky...');
     
     if (territories.length === 0) {
         console.warn('⚠️ Žiadne územia na analýzu');
         return;
     }
+    
+    // Ulož kódovník pravdepodobností do stavu
+    statsState.probabilities = probabilities;
     
     // Inicializuj filtre
     initializeStatsFilters(territories);
@@ -558,26 +561,22 @@ function _doUpdateStatistics() {
 // ============================================================================
 
 function initializeStatsFilters(territories) {
-    // Získaj unikátne okresy
+    // Získaj unikátne okresy a obce
     const districts = [...new Set(territories.map(t => t.district))].sort();
-    statsState.allDistricts = districts;
+    const municipalities = [...new Set(territories.map(t => t.municipalityName))].sort();
     
     // Populate district select
-    const districtSelect = document.getElementById('statsDistrict');
+    const districtSelect = document.getElementById('statsFilterDistrict');
     if (districtSelect) {
-        districtSelect.innerHTML = '<option value="">-- Vyberte okres --</option>' +
+        districtSelect.innerHTML = '<option value="">Všetky okresy</option>' +
             districts.map(d => `<option value="${d}">${d}</option>`).join('');
     }
     
-    // Create checkboxes
-    const checkboxContainer = document.getElementById('districtsCheckboxes');
-    if (checkboxContainer) {
-        checkboxContainer.innerHTML = districts.map((d, i) => `
-            <div class="district-checkbox-item">
-                <input type="checkbox" id="district-${i}" value="${d}">
-                <label for="district-${i}">${d}</label>
-            </div>
-        `).join('');
+    // Populate municipality select
+    const municipalitySelect = document.getElementById('statsFilterMunicipality');
+    if (municipalitySelect) {
+        municipalitySelect.innerHTML = '<option value="">Všetky obce</option>' +
+            municipalities.map(m => `<option value="${m}">${m}</option>`).join('');
     }
     
     // Event listeners
@@ -585,177 +584,77 @@ function initializeStatsFilters(territories) {
 }
 
 function setupStatsFilterListeners(territories) {
-    // View type change
-    document.getElementById('statsViewType')?.addEventListener('change', function() {
-        statsState.viewType = this.value;
-        
-        // Show/hide appropriate controls
-        const singleGroup = document.getElementById('singleDistrictGroup');
-        const multiGroup = document.getElementById('multipleDistrictsGroup');
-        
-        if (this.value === 'region') {
-            singleGroup.style.display = 'none';
-            multiGroup.style.display = 'none';
-        } else if (this.value === 'district') {
-            singleGroup.style.display = 'block';
-            multiGroup.style.display = 'none';
-        } else if (this.value === 'compare') {
-            singleGroup.style.display = 'none';
-            multiGroup.style.display = 'block';
-        }
-    });
+    // District change - aktualizuj obce
+    const districtSelect = document.getElementById('statsFilterDistrict');
+    const municipalitySelect = document.getElementById('statsFilterMunicipality');
+    
+    if (districtSelect && municipalitySelect) {
+        districtSelect.addEventListener('change', function() {
+            const selectedDistrict = this.value;
+            
+            // Resetuj výber obce
+            municipalitySelect.value = '';
+            
+            if (selectedDistrict) {
+                // Filtruj obce podľa vybraného okresu
+                const districtMunicipalities = [...new Set(
+                    territories
+                        .filter(t => t.district === selectedDistrict)
+                        .map(t => t.municipalityName)
+                )].sort();
+                
+                municipalitySelect.innerHTML = '<option value="">Všetky obce</option>' +
+                    districtMunicipalities.map(m => `<option value="${m}">${m}</option>`).join('');
+            } else {
+                // Všetky obce
+                const allMunicipalities = [...new Set(territories.map(t => t.municipalityName))].sort();
+                municipalitySelect.innerHTML = '<option value="">Všetky obce</option>' +
+                    allMunicipalities.map(m => `<option value="${m}">${m}</option>`).join('');
+            }
+        });
+    }
     
     // Apply filter
     document.getElementById('applyStatsFilter')?.addEventListener('click', function() {
         applyStatsFilter(territories);
     });
-    
-    // Reset filter
-    document.getElementById('resetStatsFilter')?.addEventListener('click', function() {
-        resetStatsFilter(territories);
-    });
-    
-    // Checkbox limit (max 5)
-    document.querySelectorAll('#districtsCheckboxes input[type="checkbox"]').forEach(cb => {
-        cb.addEventListener('change', function() {
-            const checked = document.querySelectorAll('#districtsCheckboxes input[type="checkbox"]:checked');
-            if (checked.length > 5) {
-                this.checked = false;
-                alert('Môžete vybrať maximálne 5 okresov na porovnanie.');
-            }
-        });
-    });
 }
 
 function applyStatsFilter(territories) {
-    if (statsState.viewType === 'region') {
-        // Celý kraj
-        statsState.filteredTerritories = territories;
-        document.getElementById('statsFilterInfo').textContent = 'Zobrazené: Celý Banskobystrický kraj';
-        
-    } else if (statsState.viewType === 'district') {
-        // Jeden okres
-        const district = document.getElementById('statsDistrict').value;
-        if (!district) {
-            alert('Prosím vyberte okres!');
-            return;
+    const district = document.getElementById('statsFilterDistrict')?.value || '';
+    const municipality = document.getElementById('statsFilterMunicipality')?.value || '';
+    
+    // Filtruj územia
+    let filtered = [...territories];
+    
+    if (district) {
+        filtered = filtered.filter(t => t.district === district);
+    }
+    
+    if (municipality) {
+        filtered = filtered.filter(t => t.municipalityName === municipality);
+    }
+    
+    statsState.filteredTerritories = filtered;
+    
+    // Aktualizuj info badge
+    const filterInfo = document.getElementById('statsFilterInfo');
+    if (filterInfo) {
+        let infoText = 'Celý kraj';
+        if (municipality) {
+            infoText = `Obec: ${municipality}`;
+        } else if (district) {
+            infoText = `Okres: ${district}`;
         }
-        statsState.selectedDistrict = district;
-        statsState.filteredTerritories = territories.filter(t => t.district === district);
-        document.getElementById('statsFilterInfo').textContent = `Zobrazené: Okres ${district}`;
-        
-    } else if (statsState.viewType === 'compare') {
-        // Porovnanie okresov
-        const checked = Array.from(document.querySelectorAll('#districtsCheckboxes input[type="checkbox"]:checked'));
-        const districts = checked.map(cb => cb.value);
-        
-        if (districts.length < 2) {
-            alert('Prosím vyberte aspoň 2 okresy na porovnanie!');
-            return;
-        }
-        
-        statsState.selectedDistricts = districts;
-        statsState.filteredTerritories = territories.filter(t => districts.includes(t.district));
-        document.getElementById('statsFilterInfo').textContent = `Porovnanie: ${districts.join(', ')}`;
+        filterInfo.textContent = infoText;
     }
     
     // Aktualizuj štatistiky
     updateStatistics();
 }
 
-function resetStatsFilter(territories) {
-    // Reset state
-    statsState.viewType = 'region';
-    statsState.selectedDistrict = null;
-    statsState.selectedDistricts = [];
-    statsState.filteredTerritories = territories;
-    
-    // Reset UI
-    document.getElementById('statsViewType').value = 'region';
-    document.getElementById('statsDistrict').value = '';
-    document.querySelectorAll('#districtsCheckboxes input[type="checkbox"]').forEach(cb => {
-        cb.checked = false;
-    });
-    document.getElementById('singleDistrictGroup').style.display = 'none';
-    document.getElementById('multipleDistrictsGroup').style.display = 'none';
-    document.getElementById('statsFilterInfo').textContent = 'Zobrazené: Celý Banskobystrický kraj';
-    
-    // Aktualizuj štatistiky
-    updateStatistics();
-}
-
-// ============================================================================
-// COMPARISON CHARTS
-// ============================================================================
-
-function createComparisonCharts(territories) {
-    const districts = statsState.selectedDistricts;
-    
-    // Risk comparison by district
-    const riskData = {
-        labels: ['Kritické', 'Vysoké', 'Stredné', 'Nízke'],
-        datasets: districts.map((district, index) => {
-            const districtTerritories = territories.filter(t => t.district === district);
-            const riskCounts = {
-                critical: districtTerritories.filter(t => t.riskLevel === 'critical').length,
-                high: districtTerritories.filter(t => t.riskLevel === 'high').length,
-                medium: districtTerritories.filter(t => t.riskLevel === 'medium').length,
-                low: districtTerritories.filter(t => t.riskLevel === 'low').length
-            };
-            
-            const colors = [
-                'rgba(59, 130, 246, 0.8)',
-                'rgba(16, 185, 129, 0.8)',
-                'rgba(245, 158, 11, 0.8)',
-                'rgba(239, 68, 68, 0.8)',
-                'rgba(139, 92, 246, 0.8)'
-            ];
-            
-            return {
-                label: district,
-                data: [riskCounts.critical, riskCounts.high, riskCounts.medium, riskCounts.low],
-                backgroundColor: colors[index],
-                borderColor: colors[index],
-                borderWidth: 2
-            };
-        })
-    };
-    
-    const ctx = document.getElementById('riskChart');
-    if (charts.risk) charts.risk.destroy();
-    
-    charts.risk = new Chart(ctx, {
-        type: 'bar',
-        data: riskData,
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'top' },
-                title: {
-                    display: true,
-                    text: '⚖️ Porovnanie úrovní rizika'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { precision: 0 }
-                }
-            }
-        }
-    });
-    
-    // Keep other charts simple for now
-    createMunicipalitiesChart(calculateStatistics(territories));
-    createEventsChart(calculateStatistics(territories));
-    createProbabilityChart(calculateStatistics(territories));
-    createFactorsChart(calculateStatistics(territories));
-    
-    // Districts chart not needed in comparison mode
-    const stats = calculateStatistics(territories);
-    createDistrictsChart(stats);
-}
+// REMOVED - resetStatsFilter is no longer needed with the new simple filter design
+// Users can simply clear the dropdowns manually
 
 // ============================================================================
 // EXPORT

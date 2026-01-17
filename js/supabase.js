@@ -70,6 +70,7 @@ export async function loadFactors() {
 
 /**
  * Načíta všetky pravdepodobnosti výskytu z Supabase
+ * DÔLEŽITÉ: Vracia aj stĺpec riskLevel
  */
 export async function loadProbabilities() {
     try {
@@ -102,7 +103,7 @@ export async function loadTerritories() {
         let pageNumber = 0;
         let hasMore = true;
         
-        // Načítaj všetky záznamy s paginaciou (Supabase má limit 1000 na dotaz)
+        // Načítaj všetky záznamy s pagináciou (Supabase má limit 1000 na dotaz)
         while (hasMore) {
             const from = pageNumber * pageSize;
             const to = from + pageSize - 1;
@@ -155,7 +156,7 @@ export async function loadTerritories() {
                 factorName: territory.factors?.name || '',
                 riskSource: territory.riskSource,
                 probability: territory.probability,
-                riskLevel: territory.riskLevel,
+                // riskLevel sa NEVYPLŇA - bude sa počítať dynamicky z probability
                 endangeredPopulation: territory.endangeredPopulation,
                 endangeredArea: territory.endangeredArea,
                 predictedDisruption: territory.predictedDisruption,
@@ -232,10 +233,13 @@ export async function updateTerritory(territoryId, territoryData) {
                 predictedDisruption: territoryData.predictedDisruption
             })
             .eq('id', territoryId)
-            .select()
-            .single();
+            .select();
         
         if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            throw new Error(`Územie s ID ${territoryId} nebolo nájdené alebo nemôže byť aktualizované`);
+        }
         
         console.log('✅ Územie aktualizované:', territoryId);
         return true;
@@ -296,7 +300,7 @@ export async function getTerritory(territoryId) {
                 factorName: data.factors?.name || '',
                 riskSource: data.riskSource,
                 probability: data.probability,
-                riskLevel: data.riskLevel,
+                // riskLevel sa NEVYPLŇA - bude sa počítať dynamicky z probability
                 endangeredPopulation: data.endangeredPopulation,
                 endangeredArea: data.endangeredArea,
                 predictedDisruption: data.predictedDisruption,
@@ -319,20 +323,99 @@ export async function getTerritory(territoryId) {
 
 /**
  * Určí úroveň rizika na základe pravdepodobnosti výskytu
+ * UPRAVENÉ: Používa kódovník probabilities namiesto pevného mapovania
+ * 
+ * @param {string} probabilityName - Názov pravdepodobnosti (napr. "Každých 6 - 10 rokov")
+ * @param {Array} probabilitiesCodelist - Pole objektov z tabuľky probabilities
+ * @returns {string} Úroveň rizika ('critical', 'high', 'medium', 'low')
  */
-export function getRiskLevel(probability) {
-    const riskMap = {
-        'Každé 2 - 3 roky': 'critical',
-        'Každých 4 - 5 rokov': 'critical',
-        'Každých 6 - 10 rokov': 'high',
-        'Každých 11 - 20 rokov': 'high',
-        'Každých 21 - 30 rokov': 'medium',
-        'Každých 31 - 50 rokov': 'medium',
-        'Každých 50 - 100 rokov': 'medium',
-        'Každých 100 - 200 rokov': 'low',
-        'Každých 200 a viac rokov': 'low'
+export function getRiskLevel(probabilityName, probabilitiesCodelist = []) {
+    // Ak nemáme kódovník, použijeme fallback
+    if (!probabilitiesCodelist || probabilitiesCodelist.length === 0) {
+        console.warn('⚠️ Kódovník pravdepodobností nie je k dispozícii, používam fallback');
+        return 'low';
+    }
+    
+    // Normalizuj vstup: trim, lowercase, odstráň viacnásobné medzery
+    const normalizedInput = probabilityName ? 
+        probabilityName.trim().toLowerCase().replace(/\s+/g, ' ') : 
+        '';
+    
+    // Nájdi pravdepodobnosť v kódovníku s normalizovaným porovnaním
+    const probability = probabilitiesCodelist.find(p => {
+        const normalizedName = p.name ? 
+            p.name.trim().toLowerCase().replace(/\s+/g, ' ') : 
+            '';
+        return normalizedName === normalizedInput;
+    });
+    
+    if (probability && probability.riskLevel) {
+        return probability.riskLevel;
+    }
+    
+    // FALLBACK MAPA pre hodnoty ktoré nie sú v kódovníku
+    // Toto umožňuje aplikácii fungovať aj s legacy dátami a variantmi textu
+    const fallbackMap = {
+        // Legacy hodnoty
+        'ročne': 'critical',
+        'každoročne': 'critical',
+        '1': 'critical',
+        '2': 'critical',
+        '3': 'high',
+        '4': 'high',
+        '5': 'medium',
+        'neznáme': 'low',
+        'neurčené': 'low',
+        '': 'low',
+        
+        // Varianty "každé" vs "každých" - kvôli nekonzistencii v dátach
+        'každé 2 - 3 roky': 'critical',
+        'každé 2 - 3 rokov': 'critical',
+        'každé 2- 3 rokov': 'critical',
+        'každé  2- 3 rokov': 'critical',
+        'každých 2 - 3 roky': 'critical',
+        'každých 2 - 3 rokov': 'critical',
+        
+        'každé 4 - 5 rokov': 'critical',
+        'každých 4 - 5 rokov': 'critical',
+        
+        'každé 6 - 10 rokov': 'high',
+        'každých 6 - 10 rokov': 'high',
+        
+        'každé 11 - 20 rokov': 'high',
+        'každých 11 - 20 rokov': 'high',
+        
+        'každé 21 - 30 rokov': 'medium',
+        'každých 21 - 30 rokov': 'medium',
+        
+        'každé 31 - 50 rokov': 'medium',
+        'každých 31 - 50 rokov': 'medium',
+        
+        'každé 50 - 100 rokov': 'low',
+        'každých 50 - 100 rokov': 'low',
+        
+        'každé 100 - 200 rokov': 'low',
+        'každých 100 - 200 rokov': 'low',
+        
+        'každé 200 a viac rokov': 'low',
+        'každých 200 a viac rokov': 'low'
     };
-    return riskMap[probability] || 'low';
+    
+    // Skús fallback mapu
+    if (fallbackMap[normalizedInput]) {
+        return fallbackMap[normalizedInput];
+    }
+    
+    // Ak stále nič, zaloguj a vráť low
+    if (!window._missingProbabilities) {
+        window._missingProbabilities = new Set();
+    }
+    if (!window._missingProbabilities.has(normalizedInput) && window._missingProbabilities.size < 10) {
+        console.warn(`⚠️ Nenašla sa pravdepodobnosť "${probabilityName}" v kódovníku ani vo fallback mape, používam fallback: low`);
+        window._missingProbabilities.add(normalizedInput);
+    }
+    
+    return 'low';
 }
 
 /**

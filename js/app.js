@@ -258,11 +258,15 @@ function renderTable() {
     const pageItems = appState.filteredTerritories.slice(startIndex, endIndex);
     
     // Render len aktuálnu stránku (rýchlejšie)
-    const rows = pageItems.map(territory => `
+    const rows = pageItems.map(territory => {
+        // DYNAMICKÝ PREPOČET riskLevel z probability pomocou kódovníka
+        const riskLevel = getRiskLevel(territory.probability, appState.probabilities);
+        
+        return `
         <tr>
             <td>
-                <span class="risk-badge ${territory.riskLevel}">
-                    ${getRiskLabel(territory.riskLevel)}
+                <span class="risk-badge ${riskLevel}">
+                    ${getRiskLabel(riskLevel)}
                 </span>
             </td>
             <td><strong>${territory.municipalityName}</strong></td>
@@ -290,7 +294,8 @@ function renderTable() {
                 </div>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
     
     tbody.innerHTML = rows;
     
@@ -389,8 +394,10 @@ function updateStats() {
         low: 0
     };
     
+    // DYNAMICKÝ PREPOČET riskLevel pre každé územie pomocou kódovníka
     appState.territories.forEach(territory => {
-        stats[territory.riskLevel]++;
+        const riskLevel = getRiskLevel(territory.probability, appState.probabilities);
+        stats[riskLevel]++;
     });
     
     document.getElementById('criticalCount').textContent = stats.critical;
@@ -427,15 +434,17 @@ function applyFilters() {
     }
     
     if (appState.filters.risk) {
-        filtered = filtered.filter(t => t.riskLevel === appState.filters.risk);
+        // DYNAMICKÝ PREPOČET riskLevel pre filtrovanie pomocou kódovníka
+        filtered = filtered.filter(t => getRiskLevel(t.probability, appState.probabilities) === appState.filters.risk);
     }
     
     if (appState.filters.search) {
         const search = appState.filters.search.toLowerCase();
         filtered = filtered.filter(t => 
-            t.municipalityName.toLowerCase().includes(search) ||
-            t.eventName.toLowerCase().includes(search) ||
-            t.riskSource.toLowerCase().includes(search)
+            (t.municipalityName && t.municipalityName.toLowerCase().includes(search)) ||
+            (t.eventName && t.eventName.toLowerCase().includes(search)) ||
+            (t.factorName && t.factorName.toLowerCase().includes(search)) ||
+            (t.riskSource && t.riskSource.toLowerCase().includes(search))
         );
     }
     
@@ -443,6 +452,7 @@ function applyFilters() {
     filtered.sort((a, b) => a.municipalityName.localeCompare(b.municipalityName, 'sk'));
     
     appState.filteredTerritories = filtered;
+    appState.currentPage = 1; // Reset pagination na prvú stránku
     renderTable();
 }
 
@@ -490,7 +500,9 @@ function openRecordModal(territoryId = null) {
         // Edit mode
         title.textContent = 'Upraviť záznam';
         appState.editingTerritoryId = territoryId;
-        const territory = appState.territories.find(t => t.id === territoryId);
+        
+        // Porovnaj ID ako stringy (HTML atribúty sú vždy stringy)
+        const territory = appState.territories.find(t => String(t.id) === String(territoryId));
         
         if (territory) {
             document.getElementById('municipality').value = territory.municipalityCode;
@@ -505,6 +517,12 @@ function openRecordModal(territoryId = null) {
             document.getElementById('endangeredPopulation').value = territory.endangeredPopulation || '';
             document.getElementById('endangeredArea').value = territory.endangeredArea || '';
             document.getElementById('predictedDisruption').value = territory.predictedDisruption || '';
+            
+            // DYNAMICKY NASTAVIŤ ÚROVEŇ RIZIKA z pravdepodobnosti
+            const riskLevel = getRiskLevel(territory.probability, appState.probabilities);
+            document.getElementById('riskLevel').value = riskLevel;
+        } else {
+            console.error('❌ Territory not found with ID:', territoryId);
         }
     } else {
         // Add mode
@@ -548,32 +566,47 @@ async function handleFormSubmit(e) {
         endangeredPopulation: parseInt(document.getElementById('endangeredPopulation').value) || 0,
         endangeredArea: parseFloat(document.getElementById('endangeredArea').value) || 0,
         predictedDisruption: document.getElementById('predictedDisruption').value,
-        riskLevel: getRiskLevel(probability)
+        riskLevel: getRiskLevel(probability, appState.probabilities)
     };
     
     try {
+        // Zobraz loading
+        showLoading(true);
+        
         if (appState.editingTerritoryId) {
             // Update existing
+            console.log('🔄 Calling updateTerritory with ID:', appState.editingTerritoryId, 'Type:', typeof appState.editingTerritoryId);
             await updateTerritory(appState.editingTerritoryId, territoryData);
-            alert('Záznam úspešne aktualizovaný!');
         } else {
             // Create new
             await createTerritory(territoryData);
-            alert('Záznam úspešne vytvorený!');
         }
         
-        // Refresh data
-        appState.territories = await loadTerritories();
-        appState.filteredTerritories = [...appState.territories].sort((a, b) => 
-            a.municipalityName.localeCompare(b.municipalityName, 'sk')
-        );
-        renderTable();
-        updateStats();
-        
+        // Zavri modal PRED obnovenim dat (aby bol uzivatel pripraveny)
         closeModal('recordModal');
         document.getElementById('recordForm').reset();
         
+        // Refresh data - znovu nacitaj vsetko z DB
+        appState.territories = await loadTerritories();
+        
+        // Znovu aplikuj aktualne filtre (aby sa zachovali)
+        applyFilters();
+        
+        // Aktualizuj statistiky
+        updateStats();
+        
+        // Skry loading
+        showLoading(false);
+        
+        // Zobraz uspesnu spravu AZ PO obnoveni tabulky
+        if (appState.editingTerritoryId) {
+            alert('Záznam úspešne aktualizovaný!');
+        } else {
+            alert('Záznam úspešne vytvorený!');
+        }
+        
     } catch (error) {
+        showLoading(false);
         console.error('❌ Chyba pri ukladaní:', error);
         alert('Chyba pri ukladaní záznamu. Skontrolujte konzolu.');
     }
@@ -589,18 +622,28 @@ async function deleteTerritoryConfirm(territoryId) {
     }
     
     try {
-        await deleteTerritory(territoryId);
-        alert('Záznam úspešne zmazaný!');
+        // Zobraz loading
+        showLoading(true);
         
-        // Refresh data
+        await deleteTerritory(territoryId);
+        
+        // Refresh data - znovu nacitaj vsetko z DB
         appState.territories = await loadTerritories();
-        appState.filteredTerritories = [...appState.territories].sort((a, b) => 
-            a.municipalityName.localeCompare(b.municipalityName, 'sk')
-        );
-        renderTable();
+        
+        // Znovu aplikuj aktualne filtre (aby sa zachovali)
+        applyFilters();
+        
+        // Aktualizuj statistiky
         updateStats();
         
+        // Skry loading
+        showLoading(false);
+        
+        // Zobraz uspesnu spravu AZ PO obnoveni tabulky
+        alert('Záznam úspešne zmazaný!');
+        
     } catch (error) {
+        showLoading(false);
         console.error('❌ Chyba pri mazaní:', error);
         alert('Chyba pri mazaní záznamu. Skontrolujte konzolu.');
     }
@@ -627,6 +670,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event change handler
     document.getElementById('event').addEventListener('change', function() {
         document.getElementById('eventCode').value = this.value;
+    });
+    
+    // Probability change handler - automaticky aktualizuj úroveň rizika
+    document.getElementById('probability').addEventListener('change', function() {
+        const riskLevel = getRiskLevel(this.value, appState.probabilities);
+        document.getElementById('riskLevel').value = riskLevel;
     });
     
     // Form submit
@@ -701,7 +750,7 @@ function switchView(viewName) {
     } else if (viewName === 'statistics' && statisticsView) {
         statisticsView.style.display = 'block';
         // Reinitialize statistics when view is shown
-        initializeStatistics(appState.territories, appState.municipalities, appState.events);
+        initializeStatistics(appState.territories, appState.municipalities, appState.events, appState.probabilities);
     } else if (viewName === 'codelists' && codelistsView) {
         codelistsView.style.display = 'block';
     }
