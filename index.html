@@ -14,8 +14,110 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Leaflet.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Leaflet MarkerCluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 </head>
 <body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-card">
+                <!-- Logo and Title -->
+                <div class="login-header">
+                    <div class="login-logo">
+                        <img src="./css/logo.svg" alt="SAMU Logo" class="login-logo-img">
+                    </div>
+                    <h1 class="login-title">SAMU</h1>
+                    <p class="login-subtitle">Systém analýzy mimoriadnych udalostí</p>
+                </div>
+                
+                <!-- Login Form -->
+                <form id="loginForm" class="login-form">
+                    <!-- Error Message -->
+                    <div id="loginError" class="login-error" style="display: none;">
+                        Nesprávny email alebo heslo
+                    </div>
+                    
+                    <!-- Email Input -->
+                    <div class="form-group">
+                        <label for="loginEmail" class="form-label">
+                            <svg class="form-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                            Email
+                        </label>
+                        <input 
+                            type="email" 
+                            id="loginEmail" 
+                            class="form-input" 
+                            placeholder="vas.email@example.com"
+                            required
+                            autocomplete="email"
+                        >
+                    </div>
+                    
+                    <!-- Password Input -->
+                    <div class="form-group">
+                        <label for="loginPassword" class="form-label">
+                            <svg class="form-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            </svg>
+                            Heslo
+                        </label>
+                        <input 
+                            type="password" 
+                            id="loginPassword" 
+                            class="form-input" 
+                            placeholder="••••••••"
+                            required
+                            autocomplete="current-password"
+                        >
+                    </div>
+                    
+                    <!-- Remember Me Checkbox -->
+                    <div class="form-group-checkbox">
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                id="rememberMe" 
+                                class="checkbox-input"
+                            >
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">Zapamätať si prihlásenie</span>
+                        </label>
+                    </div>
+                    
+                    <!-- Login Button -->
+                    <button type="submit" id="loginButton" class="login-button">
+                        <span id="loginSpinner" class="login-spinner" style="display: none;"></span>
+                        <span id="loginButtonText">Prihlásiť sa</span>
+                    </button>
+                </form>
+                
+                <!-- Footer Info -->
+                <div class="login-footer">
+                    <p class="login-footer-text">
+                        <svg class="footer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        Pre prístup kontaktujte administrátora
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application (Hidden Until Logged In) -->
+    <div id="mainApp" style="display: none;">
     <!-- Background Effects -->
     <div class="bg-gradient"></div>
     <div class="bg-pattern"></div>
@@ -68,19 +170,24 @@
             </button>
         </nav>
         
+        
         <div class="sidebar-footer">
-            <div class="user-profile">
-                <div class="user-avatar">
-                    <span>A</span>
-                </div>
-                <div class="user-info">
-                    <div class="user-name">Admin</div>
-                    <div class="user-role">Správca systému</div>
+            <!-- User Info Section -->
+            <div class="user-info">
+                <button id="logoutButton" class="logout-button-circle" title="Odhlásiť sa">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="20" height="20">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </button>
+                <div class="user-details">
+                    <span id="userName" class="user-name">user@example.com</span>
+                    <span id="userRole" class="user-role">Používateľ</span>
                 </div>
             </div>
         </div>
     </aside>
-
     <!-- Main Content Area -->
     <div class="main-container">
         <!-- Top Bar -->
@@ -523,6 +630,67 @@
                             <canvas id="populationChart"></canvas>
                         </div>
                     </div>
+
+                    <!-- 1. TOP 10 NAJRIZIKOVEJŠÍCH OBCÍ -->
+                    <div class="chart-card wide">
+                        <div class="chart-header">
+                            <h3>🏆 Top 10 najrizikovejších obcí</h3>
+                            <button class="chart-action-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <circle cx="12" cy="12" r="1"></circle>
+                                    <circle cx="12" cy="5" r="1"></circle>
+                                    <circle cx="12" cy="19" r="1"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="chart-body">
+                            <div id="top10MunicipalitiesTable"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 2. MAPA RIZÍK PODĽA OKRESOV -->
+                    <div class="chart-card full-width">
+                        <div class="chart-header">
+                            <h3>🗺️ Mapa rizík podľa okresov</h3>
+                            <button class="chart-action-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <circle cx="12" cy="12" r="1"></circle>
+                                    <circle cx="12" cy="5" r="1"></circle>
+                                    <circle cx="12" cy="19" r="1"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="chart-body">
+                            <div id="districtHeatmapContainer"></div>
+                        </div>
+                    </div>
+
+                    <!-- 3. INTERAKTÍVNA MAPA RIZÍK -->
+                    <div class="chart-card full-width">
+                        <div class="chart-header">
+                            <h3>🗺️ Interaktívna mapa rizík</h3>
+                            <div class="map-header-controls">
+                                <select id="mapRiskFilter" class="map-filter-select">
+                                    <option value="all">Všetky úrovne</option>
+                                    <option value="critical">Len kritické</option>
+                                    <option value="high">Len vysoké</option>
+                                    <option value="medium">Len stredné</option>
+                                    <option value="low">Len nízke</option>
+                                </select>
+                                <button class="chart-action-btn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <circle cx="12" cy="12" r="1"></circle>
+                                        <circle cx="12" cy="5" r="1"></circle>
+                                        <circle cx="12" cy="19" r="1"></circle>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-body map-body">
+                            <div id="riskMapContainer" class="risk-map-container"></div>
+                        </div>
+                    </div>
+
                 </section>
             </div>
         </div>
@@ -1036,8 +1204,18 @@
             </form>
         </div>
     </div>
+    </div> <!-- End mainApp -->
 
     <!-- Scripts -->
+    <script type="module">
+        import { initAuth, setupAuthListeners } from './js/auth.js';
+        
+        // Initialize authentication first
+        document.addEventListener('DOMContentLoaded', async function() {
+            setupAuthListeners();
+            await initAuth();
+        });
+    </script>
     <script type="module" src="js/app.js"></script>
     <script>
         // Mobile menu toggle
@@ -1079,5 +1257,11 @@
             });
         });
     </script>
+
+    <!-- Leaflet.js -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Leaflet MarkerCluster -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 </body>
 </html>

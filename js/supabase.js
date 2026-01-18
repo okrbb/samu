@@ -29,6 +29,29 @@ export async function loadMunicipalities() {
 }
 
 /**
+ * Načíta iba obce ktoré majú GPS súradnice (pre mapu)
+ * SPRÁVNA SYNTAX pre NOT NULL filter
+ */
+export async function loadMunicipalitiesWithCoordinates() {
+    try {
+        const { data, error } = await supabase
+            .from('municipalities')
+            .select('code, name, district, latitude, longitude, population')
+            .not('latitude', 'is', null)  // ✅ SPRÁVNA SYNTAX!
+            .not('longitude', 'is', null) // ✅ SPRÁVNA SYNTAX!
+            .order('name', { ascending: true });
+        
+        if (error) throw error;
+        
+        console.log(`✅ Načítaných ${data.length} obcí so súradnicami`);
+        return data || [];
+    } catch (error) {
+        console.error('❌ Chyba pri načítaní obcí so súradnicami:', error);
+        return [];
+    }
+}
+
+/**
  * Načíta všetky krízové javy z Supabase
  */
 export async function loadEvents() {
@@ -120,7 +143,9 @@ export async function loadTerritories() {
                         region,
                         regionCode,
                         evidCode,
-                        population
+                        population,
+                        latitude,
+                        longitude
                     ),
                     events!territories_eventCode_fkey (
                         code,
@@ -148,6 +173,17 @@ export async function loadTerritories() {
                 id: territory.id,
                 municipalityCode: territory.municipalityCode,
                 municipalityName: territory.municipalities?.name || '',
+                municipality: territory.municipalities ? {
+                    code: territory.municipalities.code,
+                    name: territory.municipalities.name,
+                    district: territory.municipalities.district,
+                    districtCode: territory.municipalities.districtCode,
+                    region: territory.municipalities.region,
+                    regionCode: territory.municipalities.regionCode,
+                    population: territory.municipalities.population,
+                    latitude: territory.municipalities.latitude,  
+                    longitude: territory.municipalities.longitude 
+                } : null,
                 district: territory.municipalities?.district || '',
                 region: territory.municipalities?.region || '',
                 eventCode: territory.eventCode,
@@ -156,11 +192,12 @@ export async function loadTerritories() {
                 factorName: territory.factors?.name || '',
                 riskSource: territory.riskSource,
                 probability: territory.probability,
-                // riskLevel sa NEVYPLŇA - bude sa počítať dynamicky z probability
+                riskLevel: territory.riskLevel || 'low',
                 endangeredPopulation: territory.endangeredPopulation,
                 endangeredArea: territory.endangeredArea,
                 predictedDisruption: territory.predictedDisruption,
                 importedAt: territory.importedAt,
+                created_at: territory.created_at || territory.importedAt,
                 source: territory.source
             }));
             
