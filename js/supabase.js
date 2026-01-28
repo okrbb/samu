@@ -192,11 +192,15 @@ export async function loadTerritories(progressCallback = null) {
                 factorId: territory.factorId,
                 factorName: territory.factors?.name || '',
                 riskSource: territory.riskSource,
+                probabilitylevel: territory.probabilitylevel,
                 probability: territory.probability,
                 riskLevel: territory.riskLevel || 'low',
                 endangeredPopulation: territory.endangeredPopulation,
                 endangeredArea: territory.endangeredArea,
                 predictedDisruption: territory.predictedDisruption,
+                predictedDisruption2: territory.predictedDisruption2,
+                predictedDisruption3: territory.predictedDisruption3,
+                possibleOverlap: territory.possibleOverlap,
                 importedAt: territory.importedAt,
                 created_at: territory.created_at || territory.importedAt,
                 source: territory.source
@@ -229,7 +233,6 @@ export async function loadTerritories(progressCallback = null) {
  * Generuje jedinečné ID pre nové územie
  */
 function generateTerritoryId() {
-    // Formát: territory_XXXXX kde XXXXX je 5-ciferné náhodné číslo
     const randomNum = Math.floor(Math.random() * 99999).toString().padStart(5, '0');
     return `territory_${randomNum}`;
 }
@@ -245,7 +248,7 @@ export async function createTerritory(territoryData) {
         const { data, error } = await supabase
             .from('territories')
             .insert([{
-                id: territoryId,  // Pridané ID
+                id: territoryId,
                 municipalityCode: territoryData.municipalityCode,
                 eventCode: territoryData.eventCode,
                 factorId: territoryData.factorId,
@@ -255,6 +258,10 @@ export async function createTerritory(territoryData) {
                 endangeredPopulation: territoryData.endangeredPopulation || 0,
                 endangeredArea: territoryData.endangeredArea || 0,
                 predictedDisruption: territoryData.predictedDisruption || '',
+                predictedDisruption2: territoryData.predictedDisruption2 || null,
+                predictedDisruption3: territoryData.predictedDisruption3 || null,
+                probabilitylevel: territoryData.probabilitylevel || null,
+                possibleOverlap: territoryData.possibleOverlap || null,
                 importedAt: new Date().toISOString(),
                 source: territoryData.source || 'manual_entry'
             }])
@@ -276,7 +283,7 @@ export async function createTerritory(territoryData) {
  */
 export async function updateTerritory(territoryId, territoryData) {
     try {
-        const { data, error } = await supabase
+        const { data, error} = await supabase
             .from('territories')
             .update({
                 municipalityCode: territoryData.municipalityCode,
@@ -287,7 +294,11 @@ export async function updateTerritory(territoryId, territoryData) {
                 riskLevel: territoryData.riskLevel,
                 endangeredPopulation: territoryData.endangeredPopulation,
                 endangeredArea: territoryData.endangeredArea,
-                predictedDisruption: territoryData.predictedDisruption
+                predictedDisruption: territoryData.predictedDisruption,
+                predictedDisruption2: territoryData.predictedDisruption2 || null,
+                predictedDisruption3: territoryData.predictedDisruption3 || null,
+                probabilitylevel: territoryData.probabilitylevel || null,
+                possibleOverlap: territoryData.possibleOverlap || null
             })
             .eq('id', territoryId)
             .select();
